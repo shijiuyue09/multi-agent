@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多 Agent 个人管理工具 — 原型 Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0f1117;
+    color: #e6e8ee;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 24px;
+    border-bottom: 1px solid #232838;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header span { font-size: 12px; color: #7a8199; }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    min-height: 0;
+  }
+
+  /* ---- 左侧：对话 + 分派链 ---- */
+  .chat-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid #232838;
+  }
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .msg { max-width: 78%; line-height: 1.6; font-size: 14px; }
+  .msg.user {
+    align-self: flex-end;
+    background: #3b6ef0;
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 14px 14px 4px 14px;
+  }
+  .msg.manager {
+    align-self: flex-start;
+    background: #1a1f2e;
+    border: 1px solid #2b3350;
+    padding: 12px 16px;
+    border-radius: 4px 14px 14px 14px;
+    width: 78%;
+  }
+  .msg.manager .who {
+    font-size: 12px;
+    color: #8b93b0;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: #2b3350;
+    color: #9db4ff;
+  }
+  .dispatch {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .dispatch-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: #141926;
+    border: 1px solid #232838;
+    border-left: 3px solid var(--c, #888);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(6px);
+    animation: rise .4s ease forwards;
+  }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .dispatch-item .agent-name { color: var(--c, #888); font-weight: 600; white-space: nowrap; }
+  .dispatch-item .result { color: #b9c0d4; margin-top: 2px; }
+  .final-reply { margin-top: 10px; color: #e6e8ee; }
+
+  .presets {
+    padding: 10px 24px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    border-top: 1px solid #232838;
+  }
+  .presets button {
+    background: #1a1f2e;
+    border: 1px solid #2b3350;
+    color: #9db4ff;
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .presets button:hover { background: #232a42; }
+
+  .input-bar {
+    padding: 14px 24px;
+    display: flex;
+    gap: 10px;
+    border-top: 1px solid #232838;
+  }
+  .input-bar input {
+    flex: 1;
+    background: #1a1f2e;
+    border: 1px solid #2b3350;
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: #e6e8ee;
+    font-size: 14px;
+    outline: none;
+  }
+  .input-bar input:focus { border-color: #3b6ef0; }
+  .input-bar button {
+    background: #3b6ef0;
+    border: none;
+    color: #fff;
+    padding: 0 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  /* ---- 右侧：数据面板 ---- */
+  .panels {
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .panel {
+    background: #1a1f2e;
+    border: 1px solid #232838;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .panel ul { list-style: none; font-size: 13px; color: #b9c0d4; }
+  .panel li {
+    padding: 5px 0;
+    border-bottom: 1px dashed #232838;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .panel li:last-child { border-bottom: none; }
+  .panel .empty { color: #565e78; font-size: 12px; }
+  .panel.flash { animation: flash 1s ease; }
+  @keyframes flash {
+    0% { box-shadow: 0 0 0 2px var(--c, #3b6ef0); }
+    100% { box-shadow: none; }
+  }
+  .amount { color: #f0a24a; }
+  .tag {
+    font-size: 11px;
+    background: #232838;
+    padding: 0 6px;
+    border-radius: 4px;
+    color: #8b93b0;
+  }
+  .done { text-decoration: line-through; color: #565e78; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>多 Agent 个人管理工具</h1>
+  <span>原型 Demo · Hierarchical 模式 · Manager + 4 专职 Agent（数据均为本地模拟）</span>
+</header>
+
+<main>
+  <!-- 左侧对话区 -->
+  <section class="chat-pane">
+    <div class="messages" id="messages">
+      <div class="msg manager">
+        <div class="who"><span class="badge">Manager</span></div>
+        你好，我是协调者。你用自然语言告诉我要做什么，我会拆解意图并分派给日程、待办、记账、笔记四位专员。试试下面的示例，或直接输入。
+      </div>
+    </div>
+
+    <div class="presets" id="presets"></div>
+
+    <div class="input-bar">
+      <input id="input" placeholder="例如：明天下午三点开会，顺便记一笔午饭 35" autofocus>
+      <button id="send">发送</button>
+    </div>
+  </section>
+
+  <!-- 右侧数据面板 -->
+  <aside class="panels">
+    <div class="panel" id="panel-schedule" style="--c:#4da3ff">
+      <h2><span class="dot" style="background:#4da3ff"></span>日程</h2>
+      <ul id="list-schedule"><li class="empty">暂无日程</li></ul>
+    </div>
+    <div class="panel" id="panel-todo" style="--c:#5fd68a">
+      <h2><span class="dot" style="background:#5fd68a"></span>待办</h2>
+      <ul id="list-todo"><li class="empty">暂无待办</li></ul>
+    </div>
+    <div class="panel" id="panel-expense" style="--c:#f0a24a">
+      <h2><span class="dot" style="background:#f0a24a"></span>记账 <span class="tag" id="expense-total"></span></h2>
+      <ul id="list-expense"><li class="empty">暂无账目</li></ul>
+    </div>
+    <div class="panel" id="panel-note" style="--c:#c792ea">
+      <h2><span class="dot" style="background:#c792ea"></span>笔记</h2>
+      <ul id="list-note"><li class="empty">暂无笔记</li></ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ============ 模拟数据层（对应 SPEC 的 data/*.json） ============ */
+const store = {
+  schedule: [],
+  todo: [],
+  expense: [],
+  note: [],
+};
+
+const AGENTS = {
+  schedule: { name: "日程专员", color: "#4da3ff", panel: "panel-schedule" },
+  todo:     { name: "待办专员", color: "#5fd68a", panel: "panel-todo" },
+  expense:  { name: "记账专员", color: "#f0a24a", panel: "panel-expense" },
+  note:     { name: "笔记专员", color: "#c792ea", panel: "panel-note" },
+};
+
+/* ============ 模拟 Manager 的意图拆解（演示用关键词规则） ============ */
+/* 真实实现中这一步由 DeepSeek + CrewAI Hierarchical 完成 */
+function parseIntents(text) {
+  const intents = [];
+
+  // 记账：出现"花了/元/块"等
+  const expenseMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:元|块)/);
+  if (/花|记账|花了|支出/.test(text) || expenseMatch) {
+    const amount = expenseMatch ? parseFloat(expenseMatch[1]) : null;
+    let category = "其他";
+    if (/饭|餐|吃|午饭|晚饭|早餐|咖啡|奶茶/.test(text)) category = "餐饮";
+    else if (/打车|地铁|公交|加油|车票/.test(text)) category = "交通";
+    else if (/买|购/.test(text)) category = "购物";
+    else if (/房租|水电|物业/.test(text)) category = "居住";
+    else if (/电影|游戏|旅游|演出/.test(text)) category = "娱乐";
+    const note = (text.match(/(午饭|晚饭|早餐|打车|房租|咖啡|奶茶)/) || [])[1] || text.slice(0, 10);
+    intents.push({ agent: "expense", desc: `记账 ${amount ?? "?"} 元`, run: () => addExpense(amount, category, note) });
+  }
+
+  // 日程：出现"点/会议/开会"且带时间词
+  if (/(\d{1,2}\s*点|开会|会议|日程|约会)/.test(text) && /明天|今天|后天|周|下周|\d{1,2}[:：点]/.test(text)) {
+    const timeMatch = text.match(/(明天|今天|后天)?[^，。,]*?(\d{1,2})\s*点/);
+    const day = timeMatch && timeMatch[1] ? timeMatch[1] : (text.match(/(明天|今天|后天)/) || [null, "今天"])[1];
+    const hour = timeMatch ? parseInt(timeMatch[2]) : null;
+    const isPM = /下午|晚上/.test(text) && hour && hour < 12;
+    const date = offsetDate(day === "明天" ? 1 : day === "后天" ? 2 : 0);
+    const time = hour ? `${String(isPM ? hour + 12 : hour).padStart(2, "0")}:00` : "待定";
+    const title = (text.match(/(开\S*会|会议|产品\S*会)/) || [])[1] || "日程";
+    intents.push({ agent: "schedule", desc: `新增日程「${title}」${date} ${time}`, run: () => addEvent(title, `${date} ${time}`) });
+  }
+
+  // 待办：提醒我/别忘了/要做（且不含钱和时间点）
+  if (/(提醒我|别忘了|待办|要做)/.test(text) && intents.length === 0) {
+    const content = text.replace(/提醒我|别忘了/g, "").trim() || text;
+    intents.push({ agent: "todo", desc: `新增待办「${content}」`, run: () => addTodo(content) });
+  }
+
+  // 笔记：记一下/笔记
+  if (/记一下|笔记|收藏/.test(text) && intents.length === 0) {
+    const content = text.replace(/记一下[:：，,]?|笔记[:：，,]?/g, "").trim();
+    intents.push({ agent: "note", desc: "保存笔记", run: () => addNote(content) });
+  }
+
+  // 查询类
+  if (/有什么安排|哪些日程|本周安排|今天安排/.test(text)) {
+    intents.push({ agent: "schedule", desc: "查询日程", run: () => queryEvents() });
+  }
+  if (/花了多少|花了多少钱|汇总|账单/.test(text)) {
+    intents.push({ agent: "expense", desc: "汇总支出", run: () => summarizeExpenses() });
+  }
+  if (/待办|还没做|没完成/.test(text) && intents.length === 0) {
+    intents.push({ agent: "todo", desc: "查询待办", run: () => queryTodos() });
+  }
+
+  return intents;
+}
+
+/* ============ 模拟工具函数（对应 SPEC 3.2 tools.py） ============ */
+function offsetDate(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addEvent(title, dt) {
+  store.schedule.push({ title, dt });
+  store.schedule.sort((a, b) => a.dt.localeCompare(b.dt));
+  render("schedule");
+  return `已添加日程：${title}，${dt}`;
+}
+function queryEvents() {
+  if (!store.schedule.length) return "目前没有日程安排。";
+  return "近期日程：" + store.schedule.map(e => `${e.dt} ${e.title}`).join("；");
+}
+function addTodo(content) {
+  store.todo.push({ content, done: false });
+  render("todo");
+  return `已添加待办：${content}`;
+}
+function queryTodos() {
+  const open = store.todo.filter(t => !t.done);
+  if (!open.length) return "太棒了，没有未完成的待办。";
+  return "未完成待办：" + open.map(t => t.content).join("；");
+}
+function addExpense(amount, category, note) {
+  if (amount == null) return "缺少金额，请补充：这笔开销是多少元？";
+  store.expense.push({ amount, category, note, date: offsetDate(0) });
+  render("expense");
+  return `已记账：${category} ${amount} 元（${note}）`;
+}
+function summarizeExpenses() {
+  if (!store.expense.length) return "还没有记账记录。";
+  const total = store.expense.reduce((s, e) => s + e.amount, 0);
+  const byCat = {};
+  store.expense.forEach(e => byCat[e.category] = (byCat[e.category] || 0) + e.amount);
+  const detail = Object.entries(byCat).map(([c, v]) => `${c} ${v} 元`).join("，");
+  return `累计支出 ${total} 元：${detail}。`;
+}
+function addNote(content) {
+  store.note.push({ content });
+  render("note");
+  return `已保存笔记：「${content.slice(0, 20)}${content.length > 20 ? "…" : ""}」`;
+}
+
+/* ============ 渲染数据面板 ============ */
+function render(domain) {
+  const el = document.getElementById("list-" + domain);
+  const items = store[domain];
+  if (!items.length) return;
+  el.innerHTML = items.map(it => {
+    if (domain === "schedule") return `<li><span>${it.title}</span><span class="tag">${it.dt}</span></li>`;
+    if (domain === "todo")     return `<li><span class="${it.done ? "done" : ""}">${it.content}</span></li>`;
+    if (domain === "expense")  return `<li><span>${it.note} <span class="tag">${it.category}</span></span><span class="amount">-${it.amount}</span></li>`;
+    if (domain === "note")     return `<li><span>${it.content.slice(0, 24)}${it.content.length > 24 ? "…" : ""}</span></li>`;
+  }).join("");
+  if (domain === "expense") {
+    const total = items.reduce((s, e) => s + e.amount, 0);
+    document.getElementById("expense-total").textContent = `共 ${total} 元`;
+  }
+  const panel = document.getElementById(AGENTS[domain].panel);
+  panel.classList.remove("flash");
+  void panel.offsetWidth;
+  panel.classList.add("flash");
+}
+
+/* ============ 对话与分派动画 ============ */
+const messages = document.getElementById("messages");
+
+function addUserMsg(text) {
+  const div = document.createElement("div");
+  div.className = "msg user";
+  div.textContent = text;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function handleInput(text) {
+  addUserMsg(text);
+
+  // Manager 气泡：先出"拆解中"，再逐个出分派卡片
+  const div = document.createElement("div");
+  div.className = "msg manager";
+  div.innerHTML = `<div class="who"><span class="badge">Manager</span><span class="thinking">正在拆解意图…</span></div>`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+
+  await sleep(700);
+  const intents = parseIntents(text);
+  const thinking = div.querySelector(".thinking");
+
+  if (!intents.length) {
+    thinking.textContent = "";
+    div.insertAdjacentHTML("beforeend",
+      `<div class="final-reply">这个请求我不太确定该交给谁。你可以说得更具体些吗？比如涉及日程、待办、记账还是笔记？</div>`);
+    return;
+  }
+
+  thinking.textContent = `识别到 ${intents.length} 个意图，开始分派：`;
+  const dispatch = document.createElement("div");
+  dispatch.className = "dispatch";
+  div.appendChild(dispatch);
+
+  const results = [];
+  for (const intent of intents) {
+    await sleep(650);
+    const agent = AGENTS[intent.agent];
+    const result = intent.run();
+    results.push(result);
+    const item = document.createElement("div");
+    item.className = "dispatch-item";
+    item.style.setProperty("--c", agent.color);
+    item.innerHTML = `<div><div class="agent-name">→ ${agent.name}</div>
+      <div>${intent.desc}</div><div class="result">${result}</div></div>`;
+    dispatch.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  await sleep(400);
+  const final = document.createElement("div");
+  final.className = "final-reply";
+  final.textContent = "汇总：" + results.join("；") + "。";
+  div.appendChild(final);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+/* ============ 预设示例（对应 PRD S1–S7） ============ */
+const PRESETS = [
+  ["S1 记日程", "明天下午3点开产品评审会"],
+  ["S3 记待办", "提醒我给房东交房租"],
+  ["S4 记账", "午饭花了35元"],
+  ["S5 查账", "这个月花了多少钱，汇总一下"],
+  ["S6 记笔记", "记一下：CrewAI 的 Hierarchical 模式适合这个项目的分派逻辑"],
+  ["S7 复合指令", "明天下午3点开会，顺便记一笔午饭花了35元"],
+  ["查日程", "我有什么安排？"],
+];
+const presetsEl = document.getElementById("presets");
+PRESETS.forEach(([label, text]) => {
+  const btn = document.createElement("button");
+  btn.textContent = label;
+  btn.title = text;
+  btn.onclick = () => { input.value = text; handleInput(text); input.value = ""; };
+  presetsEl.appendChild(btn);
+});
+
+/* ============ 输入绑定 ============ */
+const input = document.getElementById("input");
+document.getElementById("send").onclick = () => {
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  handleInput(text);
+};
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("send").click();
+});
+</script>
+</body>
+</html>
